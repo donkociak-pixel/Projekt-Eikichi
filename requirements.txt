@@ -1,6 +1,6 @@
 streamlit
-langchain
 chromadb
 python-dotenv
 google-generativeai
 pdfplumber
+langchain_ollama

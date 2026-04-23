@@ -1,0 +1,164 @@
+AI TUTOR — ROADMAPA (Faza -1 przed Amadeus V2)
+Data utworzenia: 2026-04-23
+Priorytet: PILNE — buduj PRZED Amadeusem
+Cel: Lokalny nauczyciel AI który uczy na podstawie wrzuconych materiałów
+
+1. KONCEPT
+Użytkownik wrzuca materiały (arkusze maturalne PDF, zdjęcia, notatki).
+System konwertuje je do formatu czytelnego dla AI.
+AI na życzenie: generuje zadania, tłumaczy, uczy, naprowadza, sprawdza odpowiedzi.
+Dwa modele, zero komplikacji:
+UŻYTKOWNIK
+    ↕
+GEMINI API (lub Claude) — Komunikator
+  - Tłumaczy pytania ucznia na zapytania do mózgu
+  - Formatuje odpowiedzi: czytelnie, krok po kroku
+  - Persona: cierpliwy nauczyciel (nie Kurisu!)
+    ↕
+QWEN3.5 9B LOKALNY (Ollama) — Mózg dydaktyczny
+  - Stały kontekst: reguły nauczania, styl, poziom ucznia
+  - Baza wiedzy: zaindeksowane materiały użytkownika (ChromaDB)
+  - Generuje zadania na podstawie wrzuconych arkuszy
+  - Sprawdza odpowiedzi i naprowadza
+  - Dostosowuje trudność do poziomu ucznia
+  - WIDZI OBRAZY — czyta zdjęcia zadań natywnie (256K kontekst)
+
+2. STRUKTURA KATALOGÓW
+AI_TUTOR/
+│
+├── .env                        # Klucz API Gemini/Claude
+├── .gitignore
+├── requirements.txt
+│
+├── app.py                      # Streamlit — TYLKO interfejs (UI)
+│
+├── core/
+│   ├── __init__.py             # Pusty plik (mówi Pythonowi że to moduł)
+│   ├── brain.py                # Qwen3.5 9B — wrapper Ollama API
+│   ├── communicator.py         # Gemini/Claude API — wrapper
+│   ├── converter.py            # OSOBNY moduł: PDF/zdjęcie → czysty tekst
+│   └── memory.py               # OSOBNY moduł: ChromaDB — indeksowanie i wyszukiwanie
+│
+├── materials/                  # Użytkownik wrzuca tu pliki
+│   ├── raw/                    # Oryginalne PDF-y, zdjęcia
+│   └── processed/              # Przetworzone na tekst
+│
+├── personas/
+│   └── nauczyciel.json         # Persona: styl nauczania, zasady
+│
+└── logs/
+    └── progress.json           # Postępy ucznia (opcjonalnie)
+Zasada separacji: Każdy plik robi JEDNĄ rzecz:
+
+app.py → tylko UI, zero logiki
+converter.py → tylko przetwarzanie plików na tekst
+memory.py → tylko ChromaDB (zapis i wyszukiwanie)
+brain.py → tylko komunikacja z Qwen3 przez Ollama
+communicator.py → tylko komunikacja z Gemini API
+
+
+3. KLUCZOWE FUNKCJE
+MVP (Minimum żeby działało):
+
+Wrzuć materiał — upload PDF/zdjęcia w Streamlit
+Konwersja — PDF → tekst (PyMuPDF), zdjęcie → tekst (Tesseract OCR)
+Indeksowanie — tekst ląduje w ChromaDB jako chunks
+Ucz mnie — "Wytłumacz mi temat X z moich materiałów"
+Daj mi zadanie — "Wygeneruj zadanie podobne do tych z arkusza"
+Sprawdź — "Moja odpowiedź to Y, czy dobrze?"
+
+Później (nie teraz):
+
+Śledzenie postępów (które tematy opanowane, które nie)
+Adaptacyjna trudność
+Tryb egzaminu (czas, punktacja)
+Wiele przedmiotów
+
+
+4. STOS TECHNOLOGICZNY
+WarstwaTechnologiaPo coRuntime LLMOllamaSerwuje Qwen3.5 lokalnieModel lokalnyQwen3.5 9BMózg — generuje zadania, uczy, WIDZI obrazyKomunikatorGemini Flash (darmowy)Opakowuje odpowiedzi, formatujeInterfejsStreamlitProsty UI — upload + chatBaza wiedzyChromaDBIndeksuje materiały uczniaPDF → tekstPyMuPDF (fitz)Czyta PDF-yZdjęcie → tekstQwen3.5 natywnieModel widzi obrazy — Tesseract opcjonalnyJęzykPythonWszystko
+
+5. FAZY WDROŻENIA
+FAZA 0: Setup (1 dzień)
+
+ mkdir AI_TUTOR && cd AI_TUTOR && git init
+ Utwórz .env z kluczem Gemini API
+ pip install ollama streamlit chromadb pymupdf pytesseract
+ Zainstaluj Ollama + ollama pull qwen3.5:9b
+ Zainstaluj Tesseract OCR (Windows installer) — OPCJONALNIE, Qwen3.5 czyta obrazy natywnie
+ Test: curl localhost:11434/api/chat -d '{"model":"qwen3.5:9b","messages":[{"role":"user","content":"Czesc"}]}'
+ Kamień milowy: Qwen3.5 odpowiada lokalnie
+
+FAZA 1: Konwerter materiałów (2-3 dni)
+
+ converter.py — funkcja pdf_to_text(filepath) przez PyMuPDF
+ converter.py — funkcja image_to_text(filepath) przez Tesseract
+ memory.py — funkcja index_material(text, source_name) → ChromaDB
+ app.py — Streamlit z uploaderem plików + przycisk "Zaindeksuj"
+ Kamień milowy: Wrzucasz PDF, widzisz "Zaindeksowano 47 chunków"
+
+FAZA 2: Mózg + Chat (3-4 dni)
+
+ brain.py — wrapper: ask_brain(prompt, context) → Ollama API (Qwen3.5 9B)
+ communicator.py — wrapper: ask_communicator(prompt) → Gemini API
+ memory.py — funkcja find_relevant(query, n=4) → szuka w ChromaDB
+ app.py — chat: pytanie → szukaj w bazie → Qwen generuje → Gemini formatuje → odpowiedź
+ Kamień milowy: Pytasz "wytłumacz logarytmy", system odpowiada na podstawie Twoich materiałów
+
+FAZA 3: Generowanie zadań (2-3 dni)
+
+ Prompt engineering: Qwen dostaje przykładowe zadania z bazy i generuje podobne
+ Tryb "Daj mi zadanie z tematu X"
+ Tryb "Sprawdź moją odpowiedź" — Qwen porównuje z rozwiązaniem
+ Tryb "Naprowadź mnie" — Qwen daje wskazówkę, nie odpowiedź
+ Kamień milowy: System generuje zadania, sprawdza, naprowadza
+
+FAZA 4: Polish (2-3 dni)
+
+ Persona nauczyciela (cierpliwy, krok po kroku, motywujący)
+ Historia czatu w sesji
+ Lepsze formatowanie (wzory matematyczne, tabele)
+ Obsługa wielu przedmiotów (folder per przedmiot w /materials/)
+ Kamień milowy: Gotowe narzędzie do codziennej nauki
+
+
+6. PRZEPŁYW DANYCH (SZCZEGÓŁOWY)
+1. Użytkownik wrzuca PDF "arkusz_mat_2024.pdf"
+   ↓
+2. converter.py → wyciąga tekst z PDF
+   ↓
+3. memory.py → dzieli na chunki po ~500 znaków → ChromaDB
+   ↓
+4. Użytkownik pyta: "Daj mi zadanie z logarytmów"
+   ↓
+5. memory.py → szuka "logarytmy" w ChromaDB → znajduje 4 chunki z zadaniami
+   ↓
+6. brain.py → Qwen3.5 dostaje:
+   - System prompt: "Jesteś nauczycielem. Generuj zadania podobne do podanych."
+   - Kontekst: 4 chunki z prawdziwymi zadaniami
+   - Polecenie: "Wygeneruj nowe zadanie z logarytmów, poziom maturalny"
+   ↓
+7. communicator.py → Gemini dostaje surową odpowiedź Qwena
+   - Formatuje czytelnie
+   - Dodaje "Powodzenia! Jak będziesz gotowy, wpisz swoją odpowiedź"
+   ↓
+8. Użytkownik widzi ładnie sformatowane zadanie w Streamlit
+
+7. DLACZEGO TO BUDOWAĆ PIERWSZE
+
+Potrzebujesz tego teraz — nauka nie czeka
+Ten sam stos co Amadeus — Ollama, Qwen3, Streamlit, ChromaDB, API
+Prostsza architektura — 2 modele zamiast 5, zero satelitów
+Uczysz się fundamentów — routing, prompt engineering, RAG
+Reużywalne moduły — brain.py, communicator.py, memory.py przejdą do Amadeusa
+Szybki wynik — działający tutor w ~2 tygodnie vs. miesiące na Amadeusa
+
+
+8. JAK UŻYWAĆ TEGO DOKUMENTU
+
+Otwórz nowy czat z AI (Claude/Gemini/ChatGPT)
+Wklej: "Buduję AI Tutor. Oto roadmapa. Robimy FAZĘ X. Pomóż mi napisać [konkretny plik]."
+Pracuj plik po pliku, nie próbuj wszystkiego naraz
+Po każdej fazie: git add . && git commit -m "Faza X gotowa"
+Kiedy tutor działa — wracasz do AMADEUS_V2_ROADMAP.md i zaczynasz Fazę 0
+
