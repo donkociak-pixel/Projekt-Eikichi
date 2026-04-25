@@ -1,24 +1,28 @@
-import json
 import ollama
 
-with open("persony/nauczyciele/matematyka.json", "r") as f:
-    dane = json.load(f)
 
-historia = [
-    {"role": "system", "content": dane["prompt"]}
-]
 
+def klasyfikacja(user_prompt):
+    odpowiedz = ollama.chat(
+    model="qwen3.5:9b",
+    options={"num_predict": 20, "num_ctx": 8192},
+    think=False,
+    messages=[
+        {"role": "system", "content": "You are a text classifier. You will receive a message and you must return ONLY one word from the provided list of categories:'greeting, question, exercise, answer, other', and absolutely nothing else."},
+        {"role": "user", "content": user_prompt}]
+    )
+    wynik = odpowiedz["message"]["content"]
+    return wynik
 def zapytanie(user_prompt):
-    historia.append({"role": "user", "content": user_prompt})
     
     odpowiedz = ollama.chat(
         model="qwen3.5:9b",
-        messages=historia,
+        messages=[{"role": "system", "content": "You are a task executor. Complete the given task precisely. Be concise. Output only the result"},
+                 {"role": "user", "content": user_prompt}],
         options={"num_predict": 8192, "num_ctx": 8192},
         think=False
     )
     
     wynik = odpowiedz["message"]["content"]
-    historia.append({"role": "assistant", "content": wynik})
     print(wynik)
     return wynik
