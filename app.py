@@ -1,9 +1,9 @@
 from core.brain import zapytanie
-
+from core.communicator import onizuka
 
 
 while True:
     user_prompt = input()
     if user_prompt == "exit":
         exit()
-    zapytanie(user_prompt)
+    onizuka(user_prompt)
