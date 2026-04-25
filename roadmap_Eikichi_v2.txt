@@ -1,0 +1,199 @@
+AI TUTOR "EIKICHI" — ROADMAPA V2 (ZAKTUALIZOWANA)
+Data utworzenia: 2026-04-23
+Ostatnia aktualizacja: 2026-04-25
+Status: MVP działa, w trakcie budowy ChromaDB
+
+=== KLUCZOWE ZMIANY vs V1 ===
+- Gemini awansował z "formatera" na "myśliciela i nauczyciela"
+- Qwen zdegradowany z "mózgu dydaktycznego" na "orkiestratora i robotnika"
+- think=False na stałe dla Qwena (GPU za wolne na myślenie)
+- Brak historii w brain.py (Qwen jest bezstanowy)
+- Historia i persona przeniesione do communicator.py (Gemini trzyma czat)
+- Gemini decyduje i uczy, Qwen klasyfikuje, przeszukuje bazę, generuje warianty
+
+1. ARCHITEKTURA (ZMIENIONA)
+
+UŻYTKOWNIK
+    ↕
+GEMINI 2.5 Flash-Lite (Myśliciel + Nauczyciel)
+  - Persona z JSON-a (system_instruction przez chats.create)
+  - Historia rozmowy (automatyczna, Gemini sam trzyma)
+  - Sam odpowiada na pytania merytoryczne i small talk
+  - Formatuje surowe wyniki od Qwena
+  - Weryfikuje i ubiera w słowa odpowiedzi dla ucznia
+  - Decyduje o podejściu dydaktycznym
+    ↕
+QWEN 3.5 9B LOKALNY (Orkiestrator + Robotnik — Ollama)
+  - think=False ZAWSZE, num_ctx=8192
+  - Prompty ZAWSZE po angielsku, krótkie
+  - klasyfikacja() — routing wiadomości (1 słowo, 1 sek)
+  - zapytanie() — generyczne wykonywanie zadań
+  - Przeszukiwanie ChromaDB (materiały ucznia)
+  - Generowanie wariantów zadań (zmienione wartości, ten sam koncept)
+  - Sprawdzanie odpowiedzi ucznia vs wzorzec z bazy
+  - NIE rozmawia z uczniem bezpośrednio
+  - NIE ma historii — każde zadanie jest niezależne
+
+2. STRUKTURA KATALOGÓW (AKTUALNA)
+
+PROJEKT_EIKICHI/
+│
+├── .env                        # Gemini_API=klucz (w .gitignore!)
+├── .gitignore
+├── requirements.txt            # streamlit, chromadb, python-dotenv,
+│                               # google-generativeai, pdfplumber, ollama
+├── app.py                      # Dyrygent — łączy klasyfikator, Qwena i Gemini
+├── roadmap_Eikichi.txt         # Ten plik
+│
+├── core/
+│   ├── __init__.py
+│   ├── brain.py                # Qwen 9B — klasyfikacja() + zapytanie()
+│   ├── communicator.py         # Gemini — onizuka(), chats.create z personą
+│   ├── converter.py            # [DO ZBUDOWANIA] PDF → tekst
+│   └── memory.py               # [DO ZBUDOWANIA] ChromaDB — indeksowanie i wyszukiwanie
+│
+├── persony/
+│   └── nauczyciele/
+│       └── matematyka.json     # Persona nauczyciela matematyki
+│
+├── materials/                  # Materiały do nauki
+│   ├── raw/                    # Oryginalne PDF-y (arkusze CKE, podręcznik Kulmy)
+│   └── processed/              # Przetworzone na tekst
+│
+└── logs/
+    └── progress.json           # [PRZYSZŁOŚĆ] Postępy ucznia
+
+3. STOS TECHNOLOGICZNY (ZAKTUALIZOWANY)
+
+Warstwa          | Technologia              | Po co
+Runtime LLM      | Ollama (localhost:11434) | Serwuje Qwen3.5 lokalnie
+Model lokalny    | Qwen3.5 9B              | Robotnik — klasyfikuje, szuka, generuje warianty
+Komunikator      | Gemini 2.5 Flash-Lite   | Myśliciel — rozmawia, uczy, formatuje
+Interfejs        | Terminal (docelowo Streamlit) | UI
+Baza wiedzy      | ChromaDB                | Indeksuje materiały ucznia
+PDF → tekst      | pdfplumber              | Czyta PDF-y
+Język            | Python                  | Wszystko
+
+4. KLUCZOWE FUNKCJE
+
+brain.py:
+  - klasyfikacja(user_prompt) → jedno słowo: greeting/question/exercise/answer/other
+    * think=False, num_predict=5-20, prompt po angielsku
+    * Bezstanowy — bez historii, bez persony
+  - zapytanie(user_prompt) → wykonanie zadania od Gemini/app.py
+    * think=False, num_predict=8192, prompt po angielsku
+    * System prompt: "You are a task executor. Complete the given task precisely."
+    * Bezstanowy — dostaje polecenie, wykonuje, zwraca wynik
+
+communicator.py:
+  - onizuka(user_prompt) → odpowiedź Gemini jako nauczyciel
+    * Gemini z personą przez chats.create(system_instruction=persona)
+    * Automatyczna historia rozmowy (Gemini sam trzyma)
+    * send_message() — wysyła wiadomość, zwraca response.text
+
+app.py (dyrygent):
+  - Pętla while True: input → klasyfikacja → routing
+  - greeting/question/other → onizuka() sam odpowiada
+  - exercise → [ChromaDB] → zapytanie() generuje wariant → onizuka() formatuje
+  - answer → zapytanie() sprawdza vs wzorzec → onizuka() komentuje
+
+5. PRZEPŁYW DANYCH (ZAKTUALIZOWANY)
+
+--- Proste pytanie ---
+1. Uczeń pisze: "wytłumacz mi logarytmy"
+2. Qwen klasyfikuje → "question" (1 sek)
+3. app.py → onizuka("wytłumacz mi logarytmy")
+4. Gemini odpowiada jako nauczyciel (2-3 sek)
+5. Uczeń widzi wyjaśnienie
+
+--- Prośba o zadanie ---
+1. Uczeń pisze: "daj mi zadanie z logarytmów"
+2. Qwen klasyfikuje → "exercise" (1 sek)
+3. app.py → memory.py szuka w ChromaDB "logarytmy" → 4 chunki
+4. app.py → zapytanie("Generate variant of this problem: [chunk]") (2 sek)
+5. Qwen generuje wariant ze zmienionymi wartościami
+6. app.py → onizuka("Oto zadanie dla ucznia: [wariant]")
+7. Gemini formatuje ładnie, dodaje zachętę (2 sek)
+8. Uczeń widzi nowe zadanie oparte na prawdziwym arkuszu
+
+--- Sprawdzenie odpowiedzi ---
+1. Uczeń pisze: "moja odpowiedź to x=5"
+2. Qwen klasyfikuje → "answer" (1 sek)
+3. app.py → zapytanie("Check: student=x=5, correct=x=5. Same?") (1 sek)
+4. Qwen porównuje → "correct"
+5. app.py → onizuka("Uczeń odpowiedział poprawnie, pochwal go")
+6. Gemini chwali ucznia (2 sek)
+
+6. FAZY WDROŻENIA (ZAKTUALIZOWANE)
+
+FAZA 0: Fundamenty ✅ UKOŃCZONA
+  ✅ git init, .env, .gitignore
+  ✅ pip install ollama chromadb pdfplumber python-dotenv google-generativeai
+  ✅ Ollama + qwen3.5:9b działa na GPU (8.5/16 GB VRAM)
+  ✅ num_ctx=8192 (z domyślnych 256K — fix VRAM overflow)
+
+FAZA 1: Brain + Communicator ✅ UKOŃCZONA
+  ✅ brain.py — klasyfikacja() + zapytanie(), bezstanowy robotnik
+  ✅ communicator.py — Gemini z personą, chats.create, send_message
+  ✅ app.py — pętla input → klasyfikacja → onizuka
+  ✅ Klucz API Gemini działa (.env → os.getenv)
+  ✅ Persona nauczyciela w JSON
+  ✅ MVP działa — klasyfikator + Gemini odpowiada w 3-8 sek
+
+FAZA 2A: Konwerter materiałów ← TERAZ TU JESTEŚMY
+  □ converter.py — pdf_to_text(filepath) przez pdfplumber
+  □ Testowanie na arkuszu CKE + podręczniku Kulmy
+  □ Zapis do materials/processed/
+  □ Kamień milowy: Wrzucasz PDF, dostajesz czysty tekst
+
+FAZA 2B: Baza wiedzy (ChromaDB)
+  □ memory.py — indeksuj(tekst, źródło) → ChromaDB chunki
+  □ memory.py — szukaj(zapytanie, n=4) → najlepsze chunki
+  □ Indeksowanie przetworzonych materiałów
+  □ Kamień milowy: "Szukaj logarytmy" → zwraca zadania z arkusza CKE
+
+FAZA 2C: Podpięcie exercise + answer w app.py
+  □ exercise: ChromaDB → Qwen generuje wariant → Gemini formatuje
+  □ answer: Qwen porównuje z wzorcem → Gemini komentuje
+  □ Prompt do Qwena: "Use ONLY provided material. Never generate from own knowledge."
+  □ Prompt do Qwena: "Generate similar problem by changing numerical values only."
+  □ Kamień milowy: Pełny cykl nauki — teoria, zadanie, sprawdzenie
+
+FAZA 3: Polish
+  □ progress.json — postępy ucznia między sesjami
+  □ Adaptacja trudności (na podstawie % poprawnych)
+  □ Wiele przedmiotów (zmiana persony + materiałów)
+  □ Streamlit UI (z terminala na interfejs graficzny)
+  □ Kamień milowy: Kompletne narzędzie do codziennej nauki
+
+7. WAŻNE ZASADY
+
+- Qwen NIGDY nie wymyśla zadań z głowy — ZAWSZE pracuje na materiałach z bazy
+- Qwen ZAWSZE dostaje prompty po angielsku — szybciej, krócej, bez dygresji o języku
+- Qwen ZAWSZE z think=False — GPU za wolne na myślenie
+- Gemini jest nauczycielem — rozmawia, tłumaczy, motywuje, formatuje
+- Dane w ChromaDB są rzetelne — pochodzą z oficjalnych arkuszy CKE i podręczników
+- Prawa autorskie — materiały lokalne, NIE na GitHubie, NIE publiczne
+
+8. BUDŻET
+
+Qwen lokalny: $0 — za darmo, na GPU
+Gemini 2.5 Flash-Lite: ~$0.10/M tokenów input — grosze
+Realistyczny koszt miesięczny: 5-15 PLN przy codziennej nauce
+
+9. PRZYSZŁOŚĆ (AMADEUS)
+
+Ta sama architektura skaluje się do Amadeusa:
+- Gemini = front/myśliciel (bez zmian)
+- Qwen = orkiestrator/router (klasyfikacja → satelity)
+- Satelity: Claude API (kod), Grok API (dane), ChatGPT API (konsultacje)
+- Upgrade GPU (24+ GB VRAM) → Qwen 14B z think=True → Qwen wraca jako mózg
+- Modularność kodu pozwala zamienić role bez przepisywania
+
+10. JAK UŻYWAĆ TEGO DOKUMENTU
+
+1. Otwórz nowy czat z AI (Claude/Gemini/ChatGPT)
+2. Wklej tę roadmapę
+3. Powiedz: "Buduję AI Tutor Eikichi. Oto roadmapa. Robimy FAZĘ X. Pomóż mi."
+4. Pracuj plik po pliku, testuj po każdej zmianie
+5. Po każdej fazie: git add . && git commit -m "Faza X gotowa" && git push

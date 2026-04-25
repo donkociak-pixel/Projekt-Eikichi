@@ -11,7 +11,7 @@ klucz = os.getenv("GEMINI_API")
 gemini = genai.Client(api_key = klucz)
 
 czat = gemini.chats.create(
-    model="gemini-2.5-flash-lite",
+    model="gemini-2.5-flash",
     config={"system_instruction": dane["prompt"]}
 )
 
