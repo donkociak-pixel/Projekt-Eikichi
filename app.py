@@ -1,3 +1,4 @@
+import streamlit as st
 from core.brain import zapytanie, klasyfikacja
 from core.communicator import onizuka
 
